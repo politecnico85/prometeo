@@ -245,3 +245,70 @@ Extendemos el módulo de specifications para incluir reglas de fechas.
 Se necesita integrar estas validaciones en `FacturaAggregate` o implementar `InventarioService.registrar_entrada`
 
 
+
+
+
+Implementación de Validaciones de Fechas en el Aggregate de Factura
+Para optimizar las validaciones de fechas en el aggregate FacturaAggregate, integraremos reglas específicas relacionadas con las fechas (fecha_emision, fecha_caducidad, y fecha_autorizacion) en el contexto del dominio de facturación, siguiendo los principios de Domain-Driven Design (DDD). Usaremos el patrón Specification para encapsular las reglas de negocio, manteniendo el aggregate enfocado en su consistencia interna y delegando validaciones externas (si las hay) al FacturaService. Las validaciones se centrarán en:
+
+Reglas de Negocio para Fechas:
+
+fecha_emision debe ser igual o posterior a la fecha actual.
+fecha_caducidad debe ser posterior a fecha_emision (si existe).
+fecha_autorizacion debe ser igual o anterior a fecha_emision y no futura.
+Opcional: Validar que la factura no se emita en un estado inválido (e.g., sin stock suficiente, aunque esto se delega a InventarioService).
+
+
+Optimizaciones:
+
+Usar specifications para reglas reutilizables y combinables.
+Centralizar manejo de errores para claridad y depuración.
+Minimizar redundancias en validaciones.
+Aprovechar Python datetime para cálculos precisos de fechas.
+
+
+Integración:
+
+Las validaciones se aplicarán en el aggregate durante operaciones clave (crear_nueva, agregar_linea, emitir).
+La validación de stock (relacionada con MovimientosInventario) se delegará a InventarioService, manteniendo el aggregate ligero.
+
+
+
+Asumimos que las entidades y value objects (Factura, LineaFactura, TotalesFactura, RUC, Direccion, FormaPago) están definidos como en los ejemplos previos. Reusaremos el módulo specifications para compartir lógica con NotaCreditoAggregate y extenderemos el código de factura_aggregate.py y factura_service.py para incluir validaciones de fechas.
+Specifications para Validaciones de Fechas
+Extendemos el módulo de specifications, compartiendo lógica común con NotaCredito.
+
+
+
+
+
+#### Cambios y Optimizaciones
+1. **Specifications de Fechas**:
+   - `FechaEmisionValida`: Garantiza que `fecha_emision` no sea anterior a hoy.
+   - `FechaCaducidadValida`: Verifica que `fecha_caducidad` sea posterior a `fecha_emision` (si existe).
+   - `FechaAutorizacionValida`: Asegura que `fecha_autorizacion` no sea futura y esté antes o igual a `fecha_emision`.
+2. **Integración en Aggregate**:
+   - Las specifications (`FechaEmisionValida`, etc.) se añaden a `_validaciones` en el aggregate.
+   - Se valida al crear (`crear_nueva`), agregar líneas (`agregar_linea`), y emitir (`emitir`).
+3. **Service Simplicidad**:
+   - No se requieren validaciones externas de fechas, ya que `Factura` no depende de otros aggregates para fechas (a diferencia de `NotaCredito`).
+   - El service pasa fechas opcionales al aggregate, con valores por defecto seguros.
+4. **Manejo de Errores**:
+   - `_verificar_invariantes` acumula errores en una lista, proporcionando mensajes claros (e.g., "Validación fallida: FechaEmisionValida").
+5. **Flexibilidad**:
+   - Fechas opcionales (`fecha_caducidad`) se manejan con `None`, permitiendo configuraciones flexibles.
+   - Specifications son reutilizables (compartidas con `NotaCredito`).
+6. **Robustez**:
+   - Default values en `Factura` (`fecha_emision` y `fecha_autorizacion` como hoy, `fecha_caducidad` como +30 días) previenen estados inválidos.
+   - Validaciones en el aggregate aseguran consistencia interna.
+
+#### Notas
+- **Persistencia**: Usa SQLAlchemy para mapear `Factura`, `LineaFactura`, y `TotalesFactura`, asegurando que las columnas de tipo `Date` (`fecha_emision`, etc.) se manejen correctamente.
+- **Testing**: Escribe unit tests para specifications (e.g., probar `FechaEmisionValida` con fechas pasadas) y integration tests para `FacturaService` con DB real.
+- **Concurrencia**: Considera optimistic locking (campo `version` en `Factura`) para evitar conflictos.
+- **Extensión**: Si necesitas validaciones adicionales (e.g., restricciones legales por país o validaciones de stock previas a emisión), añade specifications o intégralas en `InventarioService`.
+
+Si deseas integrar estas validaciones con otras partes del sistema (e.g., sincronización con `NotaCredito` o implementación de `InventarioService.registrar_salida_fifo`), indícalos.
+
+
+

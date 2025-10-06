@@ -1,6 +1,6 @@
 # domain/entities/factura.py (extendido)
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 from decimal import Decimal
 from domain.value_objects.direccion import Direccion
@@ -19,6 +19,8 @@ class Factura:
     razon_social_emisor: str
     direccion_matriz: Direccion
     fecha_emision: date = field(default_factory=date.today)
+    fecha_caducidad: Optional[date] = field(default_factory=lambda: date.today() + timedelta(days=30))
+    fecha_autorizacion: date = field(default_factory=date.today)
     forma_pago: FormaPago = field(default_factory=lambda: FormaPago("Efectivo", Decimal('0.00')))
     lineas: List[LineaFactura] = field(default_factory=list)
     totales: Optional[TotalesFactura] = None  # Se crea en aggregate
