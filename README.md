@@ -103,3 +103,44 @@ Usamos Python con dataclasses. Asumimos reuso de value objects de Factura (e.g.,
 Value Objects Adicionales
 
 
+
+
+Integración con Repositories y Services
+Similar a Factura:
+
+Repository: NotaCreditoRepository para cargar/guardar el aggregate.
+Service: NotaCreditoService para creación/emisión, validando contra FacturaRepository (e.g., chequear cantidades <= líneas de factura).
+
+Ejemplo de service:
+
+
+
+
+Notas
+
+Relación con Inventario: Para devoluciones, implementa registrar_entrada en InventarioService (agregando a lotes nuevos o reversando FIFO).
+Validaciones Adicionales: En service, compara líneas con las de la factura original.
+Persistencia: Mapear con ORM (e.g., SQLAlchemy) similar a Factura.
+Extensión: Si necesitas eventos o más integraciones, avísame.
+
+Este aggregate está relacionado con Factura vía referencia, manteniendo separación de concerns.
+
+
+
+
+Optimización de Validaciones en el Aggregate de NotaCredito
+Para optimizar las validaciones en el aggregate NotaCreditoAggregate, aplicaremos principios de DDD como invariantes explícitos, separación de responsabilidades, y el patrón Specification (si aplica) para encapsular reglas de negocio complejas. El objetivo es:
+
+Claridad: Hacer las validaciones legibles y mantenibles.
+Reusabilidad: Centralizar reglas para usar en múltiples aggregates/services.
+Eficiencia: Minimizar redundancias y consultas innecesarias.
+Robustez: Asegurar consistencia sin afectar rendimiento.
+
+Nos enfocaremos en el aggregate NotaCreditoAggregate, optimizando las validaciones en emitir, _verificar_invariantes, y creación, considerando la relación con Factura. También mejoraremos la validación contra la factura original (e.g., cantidades no excedan las originales) y las reglas de negocio (e.g., totales consistentes, motivo válido).
+Usaremos el patrón Specification para reglas complejas, moviendo validaciones externas (como chequeo de factura) al NotaCreditoService. Esto mantiene el aggregate ligero y enfocado en su consistencia interna. También reduciremos duplicación de código y mejoraremos la extensibilidad.
+Código Optimizado
+Primero, definimos specifications para encapsular reglas de negocio.
+
+
+
+

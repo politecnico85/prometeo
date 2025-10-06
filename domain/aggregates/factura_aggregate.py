@@ -6,6 +6,8 @@ from domain.entities.totales_factura import TotalesFactura
 from domain.services.inventario_service import InventarioService  # Para FIFO
 from domain.entities.movimiento_inventario import MovimientoInventario  # Importar clase faltante
 from domain.entities.linea_factura import LineaFactura  # Importar clase faltante
+from domain.entities.direccion import Direccion  # Importar clase Direccion
+from domain.entities.ruc import RUC  # Importar clase RUC
 
 class FacturaAggregate:
     def __init__(self, factura: Factura, totales: TotalesFactura):

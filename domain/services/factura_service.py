@@ -3,6 +3,8 @@ from domain.aggregates.factura_aggregate import FacturaAggregate
 from domain.repositories.factura_repository import FacturaRepository
 from domain.services.inventario_service import InventarioService
 from domain.aggregates.linea_factura import LineaFactura  # Import LineaFactura
+from domain.value_objects.precio import Precio  # Import Precio
+from decimal import Decimal  # Import Decimal if not already imported
 
 class FacturaService:
     def __init__(self, factura_repo: FacturaRepository, inventario_service: InventarioService):
