@@ -1,6 +1,6 @@
 # domain/entities/nota_credito.py
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Optional
 from domain.value_objects.ruc import RUC
 from domain.value_objects.direccion import Direccion
@@ -14,6 +14,8 @@ class NotaCredito:
     id_sucursal: int
     ruc_emisor: RUC = field(default_factory=lambda: RUC("0000000000000"))  # Placeholder
     fecha_emision: date = field(default_factory=date.today)
+    fecha_caducidad: Optional[date] = field(default_factory=lambda: date.today() + timedelta(days=30))
+    fecha_autorizacion: date = field(default_factory=date.today)
     id_factura_modificada: int
     identificacion_adquiriente: str
     razon_social_emisor: str
