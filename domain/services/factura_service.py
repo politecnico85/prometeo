@@ -68,3 +68,33 @@ class FacturaService:
 
         self.factura_repo.guardar(aggregate)
         return aggregate
+    
+    #### Integration with Factura and NotaCredito   
+    ### The `FacturaService` and `NotaCreditoService` use `InventarioService` to manage inventory movements during sales and credit notes.
+
+
+# Update FacturaService to integrate FIFO
+# domain/services/factura_service.py (partial update)
+def crear_y_emitir_factura(self, datos: dict) -> FacturaAggregate:
+    # ... (previous code for creating aggregate and adding lines)
+        errors = self.validation_service.validate_factura(aggregate)
+        if errors:
+            raise ValueError("; ".join(errors))
+
+        # Emitir factura
+        events = aggregate.emitir(self.inventario_service)
+        for event in events:
+            if isinstance(event, StockReducido):
+                # Register FIFO salida
+                self.inventario_service.registrar_salida_fifo(
+                    id_producto=event.data["producto_id"],
+                    id_bodega=event.data["bodega_id"],
+                    id_factura=aggregate.root.id_factura,
+                    cantidad=event.data["cantidad"]
+                )
+            self.event_store.append(event)
+            self.event_handler.handle(event)
+            self.event_publisher.publish(event)
+
+        self.factura_repo.guardar(aggregate)
+        return aggregate
