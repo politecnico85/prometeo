@@ -1,3 +1,4 @@
+# domain/aggregates/factura_aggregate.py
 from domain.entities.factura import Factura
 from domain.entities.totales_factura import TotalesFactura
 from domain.entities.linea_factura import LineaFactura
@@ -166,3 +167,4 @@ class FacturaAggregate:
 
     def _generate_id(self) -> int:
         return 1  # Simulate ID generation (replace with actual logic, e.g., database sequence)
+

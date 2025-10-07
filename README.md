@@ -446,6 +446,7 @@ This test suite verifies the StockSuficienteParaFactura specification and its in
 
 
 
+
 ### Explanation of Tests
 1. **TestFacturaAggregate**:
    - `test_stock_suficiente_para_factura`: Verifies that a factura can be emitted when sufficient stock is available, checking that `InventarioService.registrar_salida_fifo` is called correctly and returns `MovimientoInventario`.
@@ -468,4 +469,723 @@ This test suite verifies the StockSuficienteParaFactura specification and its in
 To run the tests, place the test files in the `tests/` directory and execute:
 ```bash
 python -m unittest discover tests
+
+
+
+### Explanation of Tests
+1. **TestFacturaAggregate**:
+   - `test_stock_suficiente_para_factura`: Verifies that a factura can be emitted when sufficient stock is available, checking that `InventarioService.registrar_salida_fifo` is called correctly and returns `MovimientoInventario`.
+   - `test_stock_insuficiente_raises_error`: Ensures that attempting to emit a factura with insufficient stock raises a `ValueError`.
+   - `test_no_inventario_raises_error`: Tests that a missing inventory record triggers a `ValueError`.
+
+2. **TestNotaCreditoAggregate**:
+   - `test_inventario_existe_para_nota_credito`: Confirms that a nota de crédito can be emitted when inventory records exist, verifying that `InventarioService.registrar_entrada` is called and returns `MovimientoInventario`.
+   - `test_inventario_no_existe_raises_error`: Ensures that a missing inventory record raises a `ValueError`.
+   - `test_lineas_validas_contra_factura`: Validates that `LineasValidasContraFactura` passes when the nota de crédito quantities are within the factura’s limits.
+   - `test_lineas_invalidas_contra_factura_raises_error`: Checks that exceeding the factura’s quantities fails the `LineasValidasContraFactura` validation.
+
+3. **TestInventarioService**:
+   - `test_registrar_salida_fifo_suficiente`: Verifies that `registrar_salida_fifo` correctly processes stock exits using FIFO, updating `Lote` and `Inventario`.
+   - `test_registrar_salida_fifo_insuficiente`: Ensures that insufficient stock in FIFO logic raises a `ValueError`.
+   - `test_registrar_entrada`: Confirms that `registrar_entrada` correctly updates stock and creates a new `Lote` for returned items.
+   - `test_registrar_entrada_no_inventario`: Tests that a missing inventory record raises a `ValueError`.
+
+### Running the Tests
+To run the tests, place the test files in the `tests/` directory and execute:
+```bash
+python -m unittest discover tests
+
+
+Notes
+
+Dependencies: The tests use unittest and unittest.mock, which are part of Python’s standard library. No additional dependencies are required.
+Mocking: The InventarioService, InventarioRepository, and LoteRepository are mocked to isolate the tests from database interactions.
+Coverage: The tests cover the critical stock validation paths. Additional tests could be added for edge cases (e.g., partial stock availability across multiple lots or concurrent stock updates).
+Integration Tests: For real database interactions, implement sql_repository.py with SQLAlchemy and write integration tests using a test database.
+Extensibility: If additional stock rules (e.g., checking lot expiration dates) are added, extend the test suites to cover those cases.
+
+These tests integrate seamlessly with the existing project, ensuring that stock validations for both FacturaAggregate and NotaCreditoAggregate are robust. If you need integration tests or additional test cases (e.g., for concurrent stock updates), let me know!Explore event sourcing for DDDEvent Sourcing is a powerful pattern in Domain-Driven Design (DDD) that involves persisting the state of an aggregate as a sequence of events, rather than storing just the current state. Each event represents a state change in the aggregate, and the current state can be reconstructed by replaying these events. This approach aligns well with DDD’s focus on modeling the domain accurately and capturing business intent, as events naturally represent domain-significant occurrences.
+In the context of your facturacion_ddd project, which includes FacturaAggregate and NotaCreditoAggregate, event sourcing can enhance traceability, auditability, and flexibility for handling stock-related operations (e.g., stock entries and exits). Below, I’ll explain how to apply event sourcing to the project, focusing on stock validations for FacturaAggregate and NotaCreditoAggregate. I’ll provide a clear implementation strategy, including new components, modifications to existing code, and unit tests, while keeping the response concise and practical.
+
+Event Sourcing in DDD: Key Concepts
+
+Events: Immutable records of something that happened in the domain (e.g., FacturaEmitida, NotaCreditoEmitida, StockReducido, StockIncrementado). Each event contains relevant data (e.g., product ID, quantity, timestamp).
+Event Store: A persistent storage mechanism that saves the sequence of events for each aggregate (identified by its aggregate_id).
+Aggregate State Reconstruction: The aggregate’s state is derived by replaying all its events in order, applying each event to build the current state.
+Domain Events: Events are domain-specific and carry business meaning, often triggering further actions or updates in other parts of the system (e.g., updating accounting or notifying external systems).
+Benefits:
+
+Auditability: Full history of state changes is preserved.
+Flexibility: New features can be added by processing events differently (e.g., generating reports or analytics).
+Consistency: Events ensure a single source of truth for state changes.
+
+
+Challenges:
+
+Complexity: Managing event schemas, versioning, and replay logic.
+Performance: Replaying many events can be slow; snapshots can mitigate this.
+Eventual Consistency: Systems reacting to events may be asynchronous.
+
+
+
+
+Applying Event Sourcing to facturacion_ddd
+We’ll integrate event sourcing into the FacturaAggregate and NotaCreditoAggregate to handle stock-related operations, ensuring that stock validations (e.g., StockSuficienteParaFactura and InventarioExisteParaNotaCredito) are enforced through events. The events will capture actions like issuing a factura, issuing a nota de crédito, and updating stock levels.
+Updated Project Structure
+To support event sourcing, we’ll add an event store, domain event classes, and an event handler. The updated structure is:
+textfacturacion_ddd/
+├── domain/
+│   ├── entities/
+│   │   ├── factura.py
+│   │   ├── linea_factura.py
+│   │   ├── totales_factura.py
+│   │   ├── nota_credito.py
+│   │   ├── linea_nota_credito.py
+│   │   ├── totales_nota_credito.py
+│   │   ├── producto.py
+│   │   ├── inventario.py
+│   │   ├── lote.py
+│   │   ├── movimiento_inventario.py
+│   ├── value_objects/
+│   │   ├── direccion.py
+│   │   ├── ruc.py
+│   │   ├── forma_pago.py
+│   │   ├── motivo_modificacion.py
+│   │   ├── precio.py
+│   ├── specifications/
+│   │   ├── factura_specifications.py
+│   │   ├── nota_credito_specifications.py
+│   │   ├── inventario_specifications.py
+│   ├── aggregates/
+│   │   ├── factura_aggregate.py
+│   │   ├── nota_credito_aggregate.py
+│   ├── events/
+│   │   ├── domain_event.py
+│   │   ├── factura_events.py
+│   │   ├── nota_credito_events.py
+│   │   ├── inventario_events.py
+│   ├── services/
+│   │   ├── factura_service.py
+│   │   ├── nota_credito_service.py
+│   │   ├── inventario_service.py
+│   │   ├── event_handler.py
+│   ├── repositories/
+│   │   ├── factura_repository.py
+│   │   ├── nota_credito_repository.py
+│   │   ├── inventario_repository.py
+│   │   ├── lote_repository.py
+│   │   ├── producto_repository.py
+│   │   ├── event_store.py
+├── tests/
+│   ├── test_factura_aggregate.py
+│   ├── test_nota_credito_aggregate.py
+│   ├── test_inventario_service.py
+│   ├── test_event_sourcing.py
+├── infrastructure/
+│   └── persistence/
+│       ├── sql_repository.py
+│       ├── event_store_sql.py
+└── application/
+    └── main.py
+New Components
+
+
+Domain Events
+Define base and specific domain events for factura, nota de crédito, and inventory operations.
+
+
+
+
+### Key Changes and Benefits
+1. **Event-Driven Aggregates**:
+   - `FacturaAggregate` and `NotaCreditoAggregate` now emit events (`FacturaEmitida`, `StockReducido`, `NotaCreditoEmitida`, `StockIncrementado`) instead of directly updating state.
+   - The `apply_event` method allows state reconstruction from events, enabling event sourcing.
+2. **Event Store**:
+   - The `SqlEventStore` persists events in a database table, ensuring auditability and traceability.
+3. **Event Handler**:
+   - The `EventHandler` processes `StockReducido` and `StockIncrementado` events by calling `InventarioService`, decoupling stock updates from the aggregates.
+4. **Services**:
+   - `FacturaService` and `NotaCreditoService` persist events to the `EventStore` and delegate stock updates to the `EventHandler`.
+5. **Stock Validations**:
+   - Stock validations (`StockSuficienteParaFactura`, `InventarioExisteParaNotaCredito`) are still enforced before emitting events, ensuring domain rules are respected.
+6. **Benefits for Stock Management**:
+   - **Traceability**: Every stock change is recorded as an event, allowing you to trace why and when stock was modified.
+   - **Reversibility**: Stock corrections (e.g., for errors) can be handled by emitting compensating events.
+   - **Analytics**: Events can be used to generate reports on stock movements or sales trends.
+
+### Running the Tests
+To run the tests, ensure the `tests/` directory contains all test files and execute:
+```bash
+python -m unittest discover tests
+
+
+Notes
+
+Snapshots: For performance, consider implementing snapshots to store the aggregate’s state periodically, reducing the number of events to replay.
+Event Versioning: Plan for event schema evolution (e.g., using upcast methods to handle older event versions).
+Concurrency: Use optimistic locking in the EventStore (e.g., check aggregate_version) to prevent concurrent modifications.
+CQRS Integration: Pair event sourcing with CQRS (Command Query Responsibility Segregation) to maintain read-optimized projections (e.g., current stock levels) in a separate database.
+Dependencies: The event_store_sql.py requires sqlalchemy. Install it via:
+bashpip install sqlalchemy
+
+Testing: The tests focus on event generation and state reconstruction. Add integration tests with a real database (e.g., SQLite) to verify persistence.
+
+Future Extensions
+
+Additional Events: Add events for other actions (e.g., LoteCreado, FacturaAnulada).
+Projections: Create read models for querying stock levels or factura summaries without replaying all events.
+Event Publishing: Integrate a message broker (e.g., RabbitMQ) to publish events to other systems (e.g., accounting).
+Error Handling: Implement compensating transactions for failed stock updates.
+
+This implementation integrates event sourcing into the facturacion_ddd project while maintaining existing stock validations. If you need specific extensions (e.g., CQRS projections, additional events, or integration tests), let me know!Domain Event PublishingTo integrate Domain Event Publishing into the facturacion_ddd project, we’ll extend the event sourcing implementation to publish domain events (e.g., FacturaEmitida, StockReducido, NotaCreditoEmitida, StockIncrementado) to external systems or other parts of the application. This allows for decoupled communication, enabling systems like accounting, inventory analytics, or notifications to react to these events asynchronously. We’ll use a message broker (e.g., RabbitMQ) for publishing events, as it’s a robust and widely-used solution for distributed systems. The focus will remain on stock-related events and their integration with the existing FacturaAggregate and NotaCreditoAggregate.
+Below, I’ll outline the strategy for implementing domain event publishing, provide new and updated code, and include unit tests to verify the behavior. The implementation will:
+
+Use RabbitMQ as the message broker to publish events.
+Extend the existing event sourcing setup to publish events after they are persisted to the EventStore.
+Ensure stock validations (StockSuficienteParaFactura, InventarioExisteParaNotaCredito) are enforced before publishing.
+Maintain compatibility with the existing project structure.
+
+
+Strategy for Domain Event Publishing
+
+Message Broker: Use RabbitMQ to publish events to a topic exchange, allowing multiple subscribers (e.g., accounting, analytics) to consume relevant events based on routing keys (e.g., factura.emitida, stock.reducido).
+Event Publisher: Introduce an EventPublisher interface and a RabbitMQ-based implementation to publish DomainEvent instances.
+Service Updates: Modify FacturaService and NotaCreditoService to publish events via the EventPublisher after storing them in the EventStore.
+Event Handler: Keep the EventHandler for local processing of stock-related events (e.g., calling InventarioService), ensuring that stock updates remain synchronous within the bounded context.
+Routing Keys: Use a naming convention for routing keys (e.g., domain.event_type) to filter events for subscribers.
+Error Handling: Ensure reliable publishing with retries and handle failures gracefully (e.g., log errors without blocking the main flow).
+Testing: Add unit tests to verify event publishing and integration tests for RabbitMQ interaction.
+
+
+Updated Project Structure
+We’ll add an EventPublisher interface and a RabbitMQ implementation, along with tests:
+textfacturacion_ddd/
+├── domain/
+│   ├── entities/
+│   │   ├── factura.py
+│   │   ├── linea_factura.py
+│   │   ├── totales_factura.py
+│   │   ├── nota_credito.py
+│   │   ├── linea_nota_credito.py
+│   │   ├── totales_nota_credito.py
+│   │   ├── producto.py
+│   │   ├── inventario.py
+│   │   ├── lote.py
+│   │   ├── movimiento_inventario.py
+│   ├── value_objects/
+│   │   ├── direccion.py
+│   │   ├── ruc.py
+│   │   ├── forma_pago.py
+│   │   ├── motivo_modificacion.py
+│   │   ├── precio.py
+│   ├── specifications/
+│   │   ├── factura_specifications.py
+│   │   ├── nota_credito_specifications.py
+│   │   ├── inventario_specifications.py
+│   ├── aggregates/
+│   │   ├── factura_aggregate.py
+│   │   ├── nota_credito_aggregate.py
+│   ├── events/
+│   │   ├── domain_event.py
+│   │   ├── factura_events.py
+│   │   ├── nota_credito_events.py
+│   ├── services/
+│   │   ├── factura_service.py
+│   │   ├── nota_credito_service.py
+│   │   ├── inventario_service.py
+│   │   ├── event_handler.py
+│   │   ├── event_publisher.py
+│   ├── repositories/
+│   │   ├── factura_repository.py
+│   │   ├── nota_credito_repository.py
+│   │   ├── inventario_repository.py
+│   │   ├── lote_repository.py
+│   │   ├── producto_repository.py
+│   │   ├── event_store.py
+├── tests/
+│   ├── test_factura_aggregate.py
+│   ├── test_nota_credito_aggregate.py
+│   ├── test_inventario_service.py
+│   ├── test_event_sourcing.py
+│   ├── test_event_publisher.py
+├── infrastructure/
+│   └── persistence/
+│       ├── sql_repository.py
+│       ├── event_store_sql.py
+│       ├── rabbitmq_publisher.py
+└── application/
+    └── main.py
+
+New and Updated Code
+1. Event Publisher Interface
+Define an interface for publishing domain events.
+
+
+---
+
+### Key Changes and Benefits
+1. **Event Publishing**:
+   - The `RabbitMQPublisher` sends events to a topic exchange with routing keys like `facturacion.facturaemitida` or `facturacion.stockincrementado`, enabling subscribers to filter events.
+   - Events are serialized as JSON for interoperability with other systems.
+2. **Service Updates**:
+   - `FacturaService` and `NotaCreditoService` now publish events after persisting them to the `EventStore` and handling them locally via `EventHandler`.
+   - Stock validations (`StockSuficienteParaFactura`, `InventarioExisteParaNotaCredito`, `LineasValidasContraFactura`) remain enforced before events are generated, ensuring domain consistency.
+3. **Decoupling**:
+   - External systems (e.g., accounting, analytics) can subscribe to the RabbitMQ exchange and process events independently, supporting eventual consistency.
+4. **Error Handling**:
+   - The `RabbitMQPublisher` logs errors and attempts to reconnect if the connection is lost. In production, consider adding retry logic or a dead-letter queue for failed messages.
+5. **Benefits for Stock Management**:
+   - **Auditability**: Events like `StockReducido` and `StockIncrementado` are published, allowing external systems to track stock changes.
+   - **Integration**: Other systems (e.g., warehouse management) can react to stock events without direct coupling to the inventory service.
+   - **Scalability**: The topic exchange supports multiple subscribers, enabling modular extensions (e.g., reporting, notifications).
+
+---
+
+### Setup and Dependencies
+1. **Install RabbitMQ**:
+   - Install RabbitMQ locally or use a cloud service (e.g., CloudAMQP).
+   - For local setup (Linux/Mac):
+     ```bash
+     sudo apt-get install rabbitmq-server  # Ubuntu
+     brew install rabbitmq  # macOS
+
+     Start RabbitMQ:
+      sudo systemctl start rabbitmq-server
+
+Python Dependency:
+
+Install pika for RabbitMQ interaction:
+   pip install pika
+
+
+Configuration:
+
+Configure the RabbitMQPublisher with the correct host (e.g., localhost for local development) and exchange name (e.g., facturacion).
+Example instantiation in main.py:
+   pythonfrom infrastructure.persistence.rabbitmq_publisher import RabbitMQPublisher
+   event_publisher = RabbitMQPublisher(host="localhost", exchange="facturacion")
+
+
+Running the Tests
+To run the tests, ensure RabbitMQ is running and the tests/ directory contains all test files:
+bashpython -m unittest discover tests
+For integration tests, you’d need a running RabbitMQ instance. The provided tests use mocks to avoid requiring a live broker, but you can add integration tests like:
+
+# tests/test_event_publisher_integration.py
+
+Notes
+
+Reliability: In production, add retry logic (e.g., using tenacity) for failed publishes and configure a dead-letter queue in RabbitMQ for unprocessed messages.
+Security: Use secure credentials and TLS for RabbitMQ in production.
+Event Consumers: Implement consumers in other systems (e.g., an accounting service) to process events like FacturaEmitida or StockIncrementado. Example consumer:
+pythonimport pika
+import json
+
+connection = pika.BlockingConnection(pika.ConnectionParameters(host="localhost"))
+channel = connection.channel()
+channel.exchange_declare(exchange="facturacion", exchange_type="topic")
+queue = channel.queue_declare(queue="", exclusive=True).method.queue
+channel.queue_bind(exchange="facturacion", queue=queue, routing_key="facturacion.*")
+
+def callback(ch, method, properties, body):
+    event = json.loads(body.decode())
+    print(f"Received event: {event['event_type']}")
+
+channel.basic_consume(queue=queue, on_message_callback=callback, auto_ack=True)
+channel.start_consuming()
+
+CQRS Synergy: Event publishing pairs well with CQRS, where consumers update read models (e.g., stock summaries) for querying.
+Testing: The provided tests use mocks for unit testing. For integration tests, ensure RabbitMQ is running and accessible.
+
+
+Future Extensions
+
+Event Versioning: Handle schema changes in events (e.g., add version to DomainEvent and implement upcasting).
+Dead-Letter Queue: Configure RabbitMQ to handle failed messages.
+Monitoring: Add metrics (e.g., Prometheus) to track event publishing success/failure rates.
+Other Brokers: Support alternatives like Kafka or AWS SNS/SQS by extending the EventPublisher interface.
+
+This implementation adds robust domain event publishing to the facturacion_ddd project, maintaining stock validations and enabling decoupled communication with external systems. If you need help setting up consumers, adding retry logic, or extending tests, let me know!
+
+
+Implement CQRS with event sourcingTo integrate CQRS (Command Query Responsibility Segregation) with Event Sourcing in the facturacion_ddd project, we’ll extend the existing event sourcing implementation to separate the write model (commands that modify state via events) from the read model (queries that retrieve data from optimized projections). This approach complements the domain event publishing setup, using the events (FacturaEmitida, StockReducido, NotaCreditoEmitida, StockIncrementado) to build denormalized read models for efficient querying, particularly for stock-related operations and factura/nota de crédito data. The focus will be on maintaining stock validations (StockSuficienteParaFactura, InventarioExisteParaNotaCredito) and ensuring compatibility with the existing project structure.
+CQRS and Event Sourcing Overview
+
+CQRS: Separates the write model (commands that change state) from the read model (queries that retrieve state). Commands update aggregates via events, while queries fetch data from optimized read models (projections).
+Event Sourcing: Persists the state of aggregates as a sequence of events in an EventStore. The current state is reconstructed by replaying events.
+Integration: Events generated by commands are used to update read models asynchronously, ensuring the read side is optimized for specific queries (e.g., current stock levels, factura summaries).
+Benefits:
+
+Scalability: Write and read models can use different data stores or schemas, optimized for their purposes.
+Flexibility: Read models can be tailored for specific use cases (e.g., stock reports, factura details).
+Auditability: Event sourcing provides a full history of state changes.
+
+
+Challenges:
+
+Complexity: Managing separate models and eventual consistency.
+Synchronization: Ensuring read models are updated correctly from events.
+
+
+
+Strategy for facturacion_ddd
+
+Write Model:
+
+Retain the existing event-sourced aggregates (FacturaAggregate, NotaCreditoAggregate) for handling commands (e.g., CrearFactura, EmitirNotaCredito).
+Store events in the EventStore and publish them to RabbitMQ (as implemented previously).
+
+
+Read Model:
+
+Create projections for common queries:
+
+StockProjection: Tracks current stock levels per product and warehouse (bodega).
+FacturaProjection: Summarizes factura details for quick retrieval.
+NotaCreditoProjection: Summarizes nota de crédito details.
+
+
+Store projections in a SQL database (e.g., SQLite for simplicity) using SQLAlchemy.
+
+
+Event Handler for Projections:
+
+Extend the EventHandler to update projections when events are processed.
+
+
+Query Service:
+
+Introduce a QueryService to handle read-side queries, fetching data from projections.
+
+
+Event Publishing:
+
+Use the existing RabbitMQPublisher to publish events, which a projection handler subscribes to for updating read models.
+
+
+Stock Validations:
+
+Ensure StockSuficienteParaFactura and InventarioExisteParaNotaCredito are enforced on the write side before events are generated.
+
+
+Testing:
+
+Add unit tests for projection updates and query services, plus integration tests for end-to-end CQRS flow.
+
+
+
+Updated Project Structure
+We’ll add projection models, a projection handler, a query service, and corresponding tests:
+textfacturacion_ddd/
+├── domain/
+│   ├── entities/
+│   │   ├── factura.py
+│   │   ├── linea_factura.py
+│   │   ├── totales_factura.py
+│   │   ├── nota_credito.py
+│   │   ├── linea_nota_credito.py
+│   │   ├── totales_nota_credito.py
+│   │   ├── producto.py
+│   │   ├── inventario.py
+│   │   ├── lote.py
+│   │   ├── movimiento_inventario.py
+│   ├── value_objects/
+│   │   ├── direccion.py
+│   │   ├── ruc.py
+│   │   ├── forma_pago.py
+│   │   ├── motivo_modificacion.py
+│   │   ├── precio.py
+│   ├── specifications/
+│   │   ├── factura_specifications.py
+│   │   ├── nota_credito_specifications.py
+│   │   ├── inventario_specifications.py
+│   ├── aggregates/
+│   │   ├── factura_aggregate.py
+│   │   ├── nota_credito_aggregate.py
+│   ├── events/
+│   │   ├── domain_event.py
+│   │   ├── factura_events.py
+│   │   ├── nota_credito_events.py
+│   ├── services/
+│   │   ├── factura_service.py
+│   │   ├── nota_credito_service.py
+│   │   ├── inventario_service.py
+│   │   ├── event_handler.py
+│   │   ├── event_publisher.py
+│   │   ├── query_service.py
+│   ├── repositories/
+│   │   ├── factura_repository.py
+│   │   ├── nota_credito_repository.py
+│   │   ├── inventario_repository.py
+│   │   ├── lote_repository.py
+│   │   ├── producto_repository.py
+│   │   ├── event_store.py
+│   │   ├── projection_repository.py
+├── tests/
+│   ├── test_factura_aggregate.py
+│   ├── test_nota_credito_aggregate.py
+│   ├── test_inventario_service.py
+│   ├── test_event_sourcing.py
+│   ├── test_event_publisher.py
+│   ├── test_cqrs.py
+├── infrastructure/
+│   └── persistence/
+│       ├── sql_repository.py
+│       ├── event_store_sql.py
+│       ├── rabbitmq_publisher.py
+│       ├── projection_sql.py
+└── application/
+    └── main.py
+New and Updated Code
+1. Projection Models
+Define SQLAlchemy models for read-side projections.
+
+
+
+### Key Changes and Benefits
+1. **CQRS Separation**:
+   - **Write Model**: `FacturaAggregate` and `NotaCreditoAggregate` handle commands, generating events that are stored and published.
+   - **Read Model**: `StockProjection`, `FacturaProjection`, and `NotaCreditoProjection` provide denormalized views for efficient querying.
+2. **Projections**:
+   - `StockProjection` tracks current stock levels, updated by `StockReducido` and `StockIncrementado` events.
+   - `FacturaProjection` and `NotaCreditoProjection` store summary data, avoiding the need to replay events for queries.
+3. **Event Handler**:
+   - The `EventHandler` updates both the `InventarioService` (for write-side consistency) and projections (for read-side consistency).
+4. **Query Service**:
+   - The `QueryService` provides a clean interface for querying stock levels, factura details, and nota de crédito details from projections.
+5. **Projection Handler**:
+   - The `ProjectionHandler` consumes events from RabbitMQ asynchronously, updating projections to support eventual consistency.
+6. **Stock Validations**:
+   - Validations (`StockSuficienteParaFactura`, `InventarioExisteParaNotaCredito`, `LineasValidasContraFactura`) are enforced on the write side before events are generated, ensuring domain integrity.
+7. **Benefits for Stock Management**:
+   - **Efficiency**: Queries for stock levels or factura details are fast, using denormalized projections instead of replaying events.
+   - **Scalability**: The read model can be scaled independently (e.g., using a separate database or caching layer).
+   - **Flexibility**: New projections can be added for additional query needs (e.g., sales reports) without modifying the write model.
+
+### Setup and Dependencies
+1. **Database**:
+   - Use SQLite for simplicity, or a production database like PostgreSQL.
+   - Configure the `ProjectionRepository` with a database URL, e.g., `sqlite:///projections.db`.
+2. **RabbitMQ**:
+   - Ensure RabbitMQ is running (as per previous instructions).
+   - Start the `ProjectionHandler` in a separate process:
+     ```python
+     from infrastructure.persistence.projection_sql import ProjectionRepository
+     from infrastructure.persistence.projection_handler import ProjectionHandler
+
+     projection_repo = ProjectionRepository("sqlite:///projections.db")
+     handler = ProjectionHandler("localhost", "facturacion", projection_repo)
+     handler.start_consuming()
+
+
+     Dependencies:
+
+Install sqlalchemy and pika:
+bashpip install sqlalchemy pika
+
+
+
+
+Running the Tests
+Run unit tests with:
+bashpython -m unittest discover tests
+For integration tests, ensure RabbitMQ and a SQLite database are available. Example integration test:
+
+
+
+Notes
+
+Eventual Consistency: The read model is eventually consistent due to asynchronous event processing. For critical queries, consider synchronous projection updates in the EventHandler (as implemented) or optimistic locking.
+Projection Rebuilding: To rebuild projections (e.g., after schema changes), replay all events from the EventStore using FacturaAggregate.from_events or NotaCreditoAggregate.from_events.
+Error Handling: Add retry logic (e.g., tenacity) for RabbitMQ failures and a dead-letter queue for unprocessed messages.
+Performance: For high event volumes, use snapshots in the write model and optimize projection tables with indexes.
+Scalability: Deploy the ProjectionHandler as a separate service for better scalability.
+
+Future Extensions
+
+Additional Projections: Add projections for specific use cases (e.g., sales analytics, customer purchase history).
+Event Versioning: Implement event schema versioning for backward compatibility.
+Monitoring: Use Prometheus to track projection update latency and errors.
+Alternative Stores: Use a NoSQL database (e.g., MongoDB) for projections if denormalized data grows complex.
+
+This implementation integrates CQRS with event sourcing in the facturacion_ddd project, maintaining stock validations and enabling efficient querying via projections. If you need specific extensions (e.g., additional projections, integration tests, or deployment guidance), let me know!Event Sourcing SnapshotsTo implement snapshots in the facturacion_ddd project with Event Sourcing and CQRS, we’ll extend the existing event sourcing system to include snapshots for the FacturaAggregate and NotaCreditoAggregate. Snapshots improve performance by storing the current state of aggregates at specific points, reducing the number of events that need to be replayed to reconstruct an aggregate’s state. This is particularly beneficial for aggregates with long event histories, such as those tracking frequent stock movements or factura/nota de crédito operations. The implementation will maintain stock validations (StockSuficienteParaFactura, InventarioExisteParaNotaCredito, LineasValidasContraFactura) and integrate with the existing CQRS and event publishing setup.
+Snapshot Strategy
+
+Snapshot Definition:
+
+A snapshot captures the current state of an aggregate (FacturaAggregate or NotaCreditoAggregate) at a specific version (event sequence number).
+Store snapshots in a SQL database (e.g., SQLite) using SQLAlchemy, alongside the EventStore.
+
+
+Snapshot Trigger:
+
+Take a snapshot after a configurable number of events (e.g., every 10 events) to balance storage and performance.
+Snapshots are created after applying new events in FacturaService and NotaCreditoService.
+
+
+Aggregate Reconstruction:
+
+When loading an aggregate, check for the latest snapshot. If found, apply it to initialize the aggregate’s state, then replay only subsequent events.
+
+
+Storage:
+
+Store snapshots in a dedicated table (snapshots) with fields for aggregate ID, type, version, and serialized state.
+Use JSON to serialize the aggregate state for simplicity.
+
+
+Integration:
+
+Update EventStore to manage snapshots.
+Modify FacturaRepository and NotaCreditoRepository to use snapshots during aggregate loading.
+Ensure snapshots do not interfere with event publishing or CQRS projections.
+
+
+Testing:
+
+Add unit tests to verify snapshot creation, storage, and aggregate reconstruction.
+Include integration tests to ensure snapshots work with the existing event sourcing flow.
+
+
+
+Updated Project Structure
+We’ll add a snapshot repository and update the event store, along with new tests:
+textfacturacion_ddd/
+├── domain/
+│   ├── entities/
+│   │   ├── factura.py
+│   │   ├── linea_factura.py
+│   │   ├── totales_factura.py
+│   │   ├── nota_credito.py
+│   │   ├── linea_nota_credito.py
+│   │   ├── totales_nota_credito.py
+│   │   ├── producto.py
+│   │   ├── inventario.py
+│   │   ├── lote.py
+│   │   ├── movimiento_inventario.py
+│   ├── value_objects/
+│   │   ├── direccion.py
+│   │   ├── ruc.py
+│   │   ├── forma_pago.py
+│   │   ├── motivo_modificacion.py
+│   │   ├── precio.py
+│   ├── specifications/
+│   │   ├── factura_specifications.py
+│   │   ├── nota_credito_specifications.py
+│   │   ├── inventario_specifications.py
+│   ├── aggregates/
+│   │   ├── factura_aggregate.py
+│   │   ├── nota_credito_aggregate.py
+│   ├── events/
+│   │   ├── domain_event.py
+│   │   ├── factura_events.py
+│   │   ├── nota_credito_events.py
+│   ├── services/
+│   │   ├── factura_service.py
+│   │   ├── nota_credito_service.py
+│   │   ├── inventario_service.py
+│   │   ├── event_handler.py
+│   │   ├── event_publisher.py
+│   │   ├── query_service.py
+│   ├── repositories/
+│   │   ├── factura_repository.py
+│   │   ├── nota_credito_repository.py
+│   │   ├── inventario_repository.py
+│   │   ├── lote_repository.py
+│   │   ├── producto_repository.py
+│   │   ├── event_store.py
+│   │   ├── projection_repository.py
+│   │   ├── snapshot_repository.py
+├── tests/
+│   ├── test_factura_aggregate.py
+│   ├── test_nota_credito_aggregate.py
+│   ├── test_inventario_service.py
+│   ├── test_event_sourcing.py
+│   ├── test_event_publisher.py
+│   ├── test_cqrs.py
+│   ├── test_snapshots.py
+├── infrastructure/
+│   └── persistence/
+│       ├── sql_repository.py
+│       ├── event_store_sql.py
+│       ├── rabbitmq_publisher.py
+│       ├── projection_sql.py
+│       ├── snapshot_sql.py
+└── application/
+    └── main.py
+New and Updated Code
+1. Snapshot Repository
+Define a SnapshotRepository to store and retrieve snapshots using SQLAlchemy.
+
+
+Domain-Driven Design PatternsTo implement Domain-Driven Design (DDD) patterns in the facturacion_ddd project with CQRS and Event Sourcing, we’ll enhance the existing architecture by applying key DDD patterns: Aggregate, Entity, Value Object, Repository, Domain Service, Domain Event, and Application Service. These patterns will strengthen the domain model, maintain stock validations (StockSuficienteParaFactura, InventarioExisteParaNotaCredito, LineasValidasContraFactura), and ensure compatibility with the event-sourced aggregates (FacturaAggregate, NotaCreditoAggregate) and CQRS read models. The implementation will focus on encapsulating business logic, improving maintainability, and supporting scalability.
+DDD Patterns in Context
+
+Aggregate:
+
+Definition: A cluster of domain objects (entities and value objects) treated as a single unit for consistency and transaction boundaries.
+In facturacion_ddd: FacturaAggregate and NotaCreditoAggregate are aggregates, with Factura and NotaCredito as root entities, managing LineaFactura/LineaNotaCredito and TotalesFactura/TotalesNotaCredito.
+Role: Enforce invariants (e.g., stock sufficiency) and generate domain events (FacturaEmitida, StockReducido, NotaCreditoEmitida, StockIncrementado).
+
+
+Entity:
+
+Definition: Objects with a unique identity and mutable state, tracked over time.
+In facturacion_ddd: Factura, NotaCredito, LineaFactura, LineaNotaCredito, Inventario, Producto, Lote, and MovimientoInventario are entities with unique IDs.
+Role: Represent core domain concepts with lifecycle and state changes.
+
+
+Value Object:
+
+Definition: Immutable objects defined by their attributes, without identity.
+In facturacion_ddd: RUC, Direccion, FormaPago, MotivoModificacion, and Precio encapsulate data and behavior (e.g., validation logic for RUC).
+Role: Ensure immutability and encapsulate business rules (e.g., Precio validates positive values).
+
+
+Repository:
+
+Definition: Provides collection-like access to aggregates, abstracting persistence details.
+In facturacion_ddd: FacturaRepository, NotaCreditoRepository, InventarioRepository, LoteRepository, ProductoRepository, and SnapshotRepository handle persistence and reconstruction of aggregates.
+Role: Load aggregates from the EventStore (using snapshots) and save events, ensuring persistence is decoupled from domain logic.
+
+
+Domain Service:
+
+Definition: Stateless operations that encapsulate complex business logic not naturally fitting in an entity or value object.
+In facturacion_ddd: InventarioService handles inventory operations (e.g., registrar_salida_fifo, registrar_entrada) and stock validations.
+Role: Coordinate cross-aggregate operations, such as checking stock availability or updating inventory based on events.
+
+
+Domain Event:
+
+Definition: Captures something that happened in the domain, used for communication and state changes.
+In facturacion_ddd: FacturaEmitida, StockReducido, NotaCreditoEmitida, and StockIncrementado represent significant state changes.
+Role: Drive event sourcing and CQRS projections, published via RabbitMQPublisher to update read models.
+
+
+Application Service:
+
+Definition: Orchestrates use cases, coordinating between aggregates, repositories, and domain services.
+In facturacion_ddd: FacturaService and NotaCreditoService orchestrate command handling (e.g., crear_y_emitir_factura, crear_y_emitir_nota_credito).
+Role: Handle input validation, invoke domain logic, and manage event persistence and publishing.
+
+
+
+Enhancements with DDD Patterns
+To fully leverage DDD patterns, we’ll:
+
+Refine Aggregates: Ensure FacturaAggregate and NotaCreditoAggregate enforce all invariants internally and expose minimal state.
+Enhance Value Objects: Add validation and behavior to value objects (e.g., RUC validation for Ecuadorian tax codes).
+Optimize Repositories: Add generic repository interfaces and implement snapshot versioning.
+Introduce Domain Services: Move complex validation logic (e.g., stock checks) to dedicated domain services.
+Strengthen Domain Events: Add event versioning and metadata for traceability.
+Improve Application Services: Add input validation and error handling for robustness.
+
+Updated Code
+1. Refine Aggregates
+Enhance FacturaAggregate and NotaCreditoAggregate to enforce invariants internally and include snapshot support.
+
+
+
+
 
