@@ -1,18 +1,17 @@
-# domain/aggregates/nota_credito_aggregate.py
-from typing import List
-from uuid import uuid4
 from datetime import date
+from typing import List
 from domain.entities.nota_credito import NotaCredito
 from domain.entities.totales_nota_credito import TotalesNotaCredito
 from domain.entities.linea_nota_credito import LineaNotaCredito
 from domain.entities.motivo_modificacion import MotivoModificacion
 from domain.entities.direccion import Direccion
+from domain.entities.movimiento_inventario import MovimientoInventario
 from domain.services.inventario_service import InventarioService
 from domain.aggregates.factura_aggregate import FacturaAggregate
-from domain.entities.movimiento_inventario import MovimientoInventario
 from domain.specifications.nota_credito_specifications import (
     NotaCreditoTieneLineas, NotaCreditoTotalValido, MotivoModificacionValido,
-    FechaEmisionValida, FechaCaducidadValida, FechaAutorizacionValida
+    FechaEmisionValida, FechaCaducidadValida, FechaAutorizacionValida,
+    InventarioExisteParaNotaCredito
 )
 
 class NotaCreditoAggregate:
@@ -33,6 +32,9 @@ class NotaCreditoAggregate:
         self._verificar_invariantes()
 
     def emitir(self, inventario_service: InventarioService, bodega_id: int, factura_agg: 'FacturaAggregate') -> List['MovimientoInventario']:
+        inventarios = inventario_service.obtener_inventarios_por_bodega(bodega_id)
+        if not InventarioExisteParaNotaCredito(inventarios, bodega_id).is_satisfied_by(self.root):
+            raise ValueError("Inventario no encontrado para los productos en la bodega especificada.")
         self._verificar_invariantes()
         movimientos = []
         for linea in self.root.lineas:
@@ -72,5 +74,5 @@ class NotaCreditoAggregate:
         )
         totales = TotalesNotaCredito(0)
         aggregate = cls(nota_credito, totales)
-        aggregate._verificar_invariantes()  # Validar al crear
+        aggregate._verificar_invariantes()
         return aggregate
