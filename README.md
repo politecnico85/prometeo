@@ -369,3 +369,103 @@ The existing LineasValidasContraFactura specification already validates that the
 The existing project structure remains intact, and these changes integrate seamlessly with the previously provided code for `FacturaAggregate` and other components. If you need further extensions (e.g., implementing `InventarioRepository` with SQLAlchemy or adding more complex stock rules), let me know!
 
 
+
+
+
+
+
+
+
+To add unit tests for the stock validations in the FacturaAggregate and NotaCreditoAggregate, we’ll focus on testing the stock-related specifications (StockSuficienteParaFactura and InventarioExisteParaNotaCredito) and their integration within the aggregates’ emitir methods. The tests will verify that:
+
+FacturaAggregate: The StockSuficienteParaFactura specification correctly validates stock availability before emitting a factura, ensuring quantities requested in LineaFactura do not exceed available stock in Inventario.
+NotaCreditoAggregate: The InventarioExisteParaNotaCredito specification ensures inventory records exist for the products and bodega before processing stock entries, and LineasValidasContraFactura validates quantities against the associated Factura.
+InventarioService: The registrar_salida_fifo and registrar_entrada methods correctly handle stock updates and generate appropriate MovimientoInventario records.
+
+We’ll use Python’s unittest framework with unittest.mock to mock dependencies like InventarioRepository, LoteRepository, and FacturaRepository. The tests will be organized in a tests/ directory within the project structure, ensuring modularity and maintainability.
+Updated Project Structure
+
+
+
+facturacion_ddd/
+├── domain/
+│   ├── entities/
+│   │   ├── factura.py
+│   │   ├── linea_factura.py
+│   │   ├── totales_factura.py
+│   │   ├── nota_credito.py
+│   │   ├── linea_nota_credito.py
+│   │   ├── totales_nota_credito.py
+│   │   ├── producto.py
+│   │   ├── inventario.py
+│   │   ├── lote.py
+│   │   ├── movimiento_inventario.py
+│   ├── value_objects/
+│   │   ├── direccion.py
+│   │   ├── ruc.py
+│   │   ├── forma_pago.py
+│   │   ├── motivo_modificacion.py
+│   │   ├── precio.py
+│   ├── specifications/
+│   │   ├── factura_specifications.py
+│   │   ├── nota_credito_specifications.py
+│   │   ├── inventario_specifications.py
+│   ├── aggregates/
+│   │   ├── factura_aggregate.py
+│   │   ├── nota_credito_aggregate.py
+│   ├── services/
+│   │   ├── factura_service.py
+│   │   ├── nota_credito_service.py
+│   │   ├── inventario_service.py
+│   ├── repositories/
+│   │   ├── factura_repository.py
+│   │   ├── nota_credito_repository.py
+│   │   ├── inventario_repository.py
+│   │   ├── lote_repository.py
+│   │   ├── producto_repository.py
+├── tests/
+│   ├── test_factura_aggregate.py
+│   ├── test_nota_credito_aggregate.py
+│   ├── test_inventario_service.py
+├── infrastructure/
+│   └── persistence/
+│       ├── sql_repository.py
+└── application/
+    └── main.py
+Unit Tests for Stock Valid
+
+
+
+
+
+Unit Tests for Stock Validations
+Below are the unit tests for the stock validations, covering FacturaAggregate, NotaCreditoAggregate, and InventarioService. Each test file is wrapped in an <xaiArtifact> tag with a unique UUID, as required.
+1. Test FacturaAggregate Stock Validations
+This test suite verifies the StockSuficienteParaFactura specification and its integration in FacturaAggregate.emitir.
+
+
+
+
+### Explanation of Tests
+1. **TestFacturaAggregate**:
+   - `test_stock_suficiente_para_factura`: Verifies that a factura can be emitted when sufficient stock is available, checking that `InventarioService.registrar_salida_fifo` is called correctly and returns `MovimientoInventario`.
+   - `test_stock_insuficiente_raises_error`: Ensures that attempting to emit a factura with insufficient stock raises a `ValueError`.
+   - `test_no_inventario_raises_error`: Tests that a missing inventory record triggers a `ValueError`.
+
+2. **TestNotaCreditoAggregate**:
+   - `test_inventario_existe_para_nota_credito`: Confirms that a nota de crédito can be emitted when inventory records exist, verifying that `InventarioService.registrar_entrada` is called and returns `MovimientoInventario`.
+   - `test_inventario_no_existe_raises_error`: Ensures that a missing inventory record raises a `ValueError`.
+   - `test_lineas_validas_contra_factura`: Validates that `LineasValidasContraFactura` passes when the nota de crédito quantities are within the factura’s limits.
+   - `test_lineas_invalidas_contra_factura_raises_error`: Checks that exceeding the factura’s quantities fails the `LineasValidasContraFactura` validation.
+
+3. **TestInventarioService**:
+   - `test_registrar_salida_fifo_suficiente`: Verifies that `registrar_salida_fifo` correctly processes stock exits using FIFO, updating `Lote` and `Inventario`.
+   - `test_registrar_salida_fifo_insuficiente`: Ensures that insufficient stock in FIFO logic raises a `ValueError`.
+   - `test_registrar_entrada`: Confirms that `registrar_entrada` correctly updates stock and creates a new `Lote` for returned items.
+   - `test_registrar_entrada_no_inventario`: Tests that a missing inventory record raises a `ValueError`.
+
+### Running the Tests
+To run the tests, place the test files in the `tests/` directory and execute:
+```bash
+python -m unittest discover tests
+

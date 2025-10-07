@@ -3,17 +3,27 @@ from datetime import date
 from domain.aggregates.nota_credito_aggregate import NotaCreditoAggregate
 from domain.repositories.nota_credito_repository import NotaCreditoRepository
 from domain.repositories.factura_repository import FacturaRepository
+from domain.repositories.event_store import EventStore
 from domain.services.inventario_service import InventarioService
+from domain.services.event_handler import EventHandler
+from domain.services.event_publisher import EventPublisher
+from infrastructure.persistence.projection_sql import ProjectionRepository
 from domain.specifications.nota_credito_specifications import (
     LineasValidasContraFactura, FechaEmisionPosteriorFactura, PlazoNotaCreditoValido
 )
-from domain.aggregates.nota_credito_aggregate import LineaNotaCredito
+from domain.entities.linea_nota_credito import LineaNotaCredito
 
 class NotaCreditoService:
-    def __init__(self, nc_repo: NotaCreditoRepository, factura_repo: FacturaRepository, inventario_service: InventarioService):
+    def __init__(self, nc_repo: NotaCreditoRepository, factura_repo: FacturaRepository, 
+                 inventario_service: InventarioService, event_store: EventStore, 
+                 event_publisher: EventPublisher, projection_repository: ProjectionRepository):
         self.nc_repo = nc_repo
         self.factura_repo = factura_repo
         self.inventario_service = inventario_service
+        self.event_store = event_store
+        self.event_handler = EventHandler(inventario_service, projection_repository)
+        self.event_publisher = event_publisher
+        self.projection_repository = projection_repository
 
     def crear_y_emitir_nota_credito(self, datos: dict) -> NotaCreditoAggregate:
         factura_agg = self.factura_repo.obtener_por_id(datos['id_factura_modificada'])
@@ -59,6 +69,12 @@ class NotaCreditoService:
         if errors:
             raise ValueError("; ".join(errors))
 
-        movimientos = aggregate.emitir(self.inventario_service, factura_agg.root.id_bodega, factura_agg)
+        # Emitir nota de crédito y obtener eventos
+        events = aggregate.emitir(self.inventario_service, factura_agg.root.id_bodega, factura_agg)
+        for event in events:
+            self.event_store.append(event)
+            self.event_handler.handle(event)
+            self.event_publisher.publish(event)
+
         self.nc_repo.guardar(aggregate)
         return aggregate
