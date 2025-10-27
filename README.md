@@ -15,9 +15,9 @@ Ubiquitous Language: Usar términos del dominio como "Factura", "MovimientoInven
 Usaremos Python con bibliotecas como dataclasses para models simples, y asumiré un ORM como SQLAlchemy para persistencia (puedes integrarlo). El código será modular, con paquetes como domain para el núcleo del negocio, separado de infraestructura (e.g., DB).
 Enfocaré en aggregates clave: Producto (con inventario y precios), Factura (con líneas y totales), y MovimientoInventario (con FIFO). No implementaré todo el esquema para brevedad, pero puedes extenderlo.
 
-H4 Estructura de Paquetes Sugerida
+## Estructura de Paquetes Sugerida
 
-textmi_proyecto/
+## textmi_proyecto/
 ├── domain/
 │   ├── entities/
 │   │   ├── producto.py
