@@ -21,32 +21,32 @@ Enfocaré en aggregates clave: Producto (con inventario y precios), Factura (con
 #### ├── domain/
 #### │   ├── entities/
 #### │   │   ├── producto.py
-│   │   ├── factura.py
-│   │   ├── movimiento_inventario.py
-│   │   └── ... (otras entities)
-│   ├── value_objects/
-│   │   ├── direccion.py
-│   │   ├── precio.py
-│   │   └── ... 
-│   ├── aggregates/
-│   │   ├── producto_aggregate.py
-│   │   ├── factura_aggregate.py
-│   │   └── ...
-│   ├── repositories/
-│   │   ├── producto_repository.py
-│   │   └── ...
-│   └── services/
-│       ├── inventario_service.py
-│       └── factura_service.py
-├── infrastructure/
-│   └── persistence/
-│       └── sql_repository.py  # Implementación con SQLAlchemy
-└── application/
-    └── main.py  # Ejemplo de uso
+#### │   │   ├── factura.py
+#### │   │   ├── movimiento_inventario.py
+#### │   │   └── ... (otras entities)
+#### │   ├── value_objects/
+#### │   │   ├── direccion.py
+#### │   │   ├── precio.py
+#### │   │   └── ... 
+#### │   ├── aggregates/
+#### │   │   ├── producto_aggregate.py
+#### │   │   ├── factura_aggregate.py
+#### │   │   └── ...
+#### │   ├── repositories/
+#### │   │   ├── producto_repository.py
+#### │   │   └── ...
+#### │   └── services/
+#### │       ├── inventario_service.py
+#### │       └── factura_service.py
+#### ├── infrastructure/
+#### │   └── persistence/
+#### │       └── sql_repository.py  # Implementación con SQLAlchemy
+#### └── application/
+####     └── main.py  # Ejemplo de uso
 
 
 
-Notas Finales
+## Notas Finales
 
 Integración con DB: Usa SQLAlchemy o otro ORM para mapear el esquema SQL completo. Implementa triggers y procedures (como after_movimiento_insert y RegistrarSalidaFIFO) como domain events o en services.
 Eventos de Dominio: Para cosas como "stock bajo", usa un event bus (e.g., con pydispatch).
