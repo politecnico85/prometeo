@@ -18,9 +18,9 @@ Enfocaré en aggregates clave: Producto (con inventario y precios), Factura (con
 ## Estructura de Paquetes Sugerida
 
 ## textmi_proyecto/
-├── domain/
-│   ├── entities/
-│   │   ├── producto.py
+#### ├── domain/
+#### │   ├── entities/
+#### │   │   ├── producto.py
 │   │   ├── factura.py
 │   │   ├── movimiento_inventario.py
 │   │   └── ... (otras entities)
