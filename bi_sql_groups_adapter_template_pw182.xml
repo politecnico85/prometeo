@@ -24,9 +24,7 @@
             <plugin>
                <name>VirtualAttribute</name>
                <class>oracle.ods.virtualization.engine.chain.plugins.virtualattr.VirtualAttributePlugin</class>
-	       <initParams>
-		  <param name="ReplaceAttribute" value="uniquemember={cn=%uniquemember%,cn=users,dc=pacifico,dc=bpgf}"/>
-               </initParams>
+	       
             </plugin>
          </plugins>
          <default>
@@ -48,11 +46,7 @@
       <maxConnections>10</maxConnections>
       <mapping>
          <joins/>
-	 <objectClass name="groupofuniquenames" rdn="cn">
-            <attribute ldap="cn" table="TDWH_BI_GROUPMEMBERS" field="G_NAME" type=""/>
-            <attribute ldap="description" table="TDWH_BI_GROUPMEMBERS" field="G_NAME" type=""/>
-            <attribute ldap="uniquemember" table="TDWH_BI_GROUPMEMBERS" field="G_MEMBER" type=""/>
-         </objectClass>
+	 
       </mapping>
       <useCaseInsensitiveSearch>true</useCaseInsensitiveSearch>
       <connectionWaitTimeout>10</connectionWaitTimeout>
