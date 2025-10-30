@@ -28,6 +28,7 @@ class Factura:
     def agregar_linea(self, linea: LineaFactura):
         self.lineas.append(linea)
         self._actualizar_totales()
+        
 
     def _actualizar_totales(self):
         if not self.totales:

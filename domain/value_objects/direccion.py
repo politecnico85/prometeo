@@ -1,4 +1,3 @@
-# domain/value_objects/direccion.py
 from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
