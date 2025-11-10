@@ -1,5 +1,3 @@
-# domain/entities/linea_factura.py
-# domain/entities/linea_factura.py (extendido)
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Optional
@@ -7,7 +5,7 @@ from domain.value_objects.precio import Precio
 
 @dataclass
 class LineaFactura:
-    id_linea_factura: Optional[int] = None  # None para nuevas
+    id_linea_factura: Optional[int] = None
     id_producto: int
     descripcion: str
     cantidad: int
